@@ -7,11 +7,11 @@ const router = express.Router();
 
 router.get('/posts', feedCtr.getPosts);
 
-router.post('/post',
-    [
-        body('title').trim().isLength({ min: 5 }),
-        body('content').trim().isLength({ min: 5 })
-    ],
-    feedCtr.postPost);
+router.post('/post', [
+    body('title').trim().isLength({ min: 5 }),
+    body('content').trim().isLength({ min: 5 })
+], feedCtr.postPost);
+
+router.get('/post/:postId', feedCtr.getPost);
 
 module.exports = router;

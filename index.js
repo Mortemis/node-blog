@@ -5,7 +5,7 @@ const parser = require('body-parser');
 const mongoose = require('mongoose');
 
 const feed = require('./routes/feed');
-
+const errorHandler = require('./middlewares/error');
 /**
  * config.json example:
  * { "MONGO_URI": "<mongo uri string>" } 
@@ -29,6 +29,8 @@ app.use((req, res, next) => {
 app.use('/feed', feed);
 
 app.use('/images', express.static(path.join(__dirname, 'images')));
+
+app.use(errorHandler);
 
 mongoose.set("useNewUrlParser", "true");
 mongoose.set("useUnifiedTopology", "true");
