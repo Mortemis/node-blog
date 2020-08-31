@@ -3,6 +3,7 @@ const { validationResult } = require('express-validator');
 const Post = require('../models/post');
 const User = require('../models/user');
 const fileUtil = require('../utils/file');
+const ws = require('../utils/ws');
 
 exports.getPosts = async (req, res) => {
     const currentPage = req.query.page || 1;
@@ -12,6 +13,7 @@ exports.getPosts = async (req, res) => {
         const totalItems = await Post.find().countDocuments().exec();
 
         const posts = await Post.find()
+            .populate('creator')
             .skip((currentPage - 1) * perPage)
             .limit(perPage)
             .exec();
@@ -65,6 +67,7 @@ exports.postPost = async (req, res, next) => {
         user.posts.push(post);
         await user.save();
 
+        ws.getIO().emit('posts', { action: 'create', post: post });
         // Create post in a db
         res.status(201).json({
             msg: 'Post created successfully',
@@ -123,17 +126,49 @@ exports.deletePost = async (req, res, next) => {
     try {
         const post = await Post.findById(postId).exec();
         if (post.creator.toString() !== req.userId) throwError('Unauthorized edit.', 403);
-        
+
         fileUtil.clearOldImg(post.imageUrl);
 
         await Post.findByIdAndRemove(postId).exec();
         console.log('[INFO] Post deleted: ' + postId);
-        
+
         const user = await User.findById(req.userId).exec();
         user.posts.pull(postId);
         await user.save();
 
         res.status(200).json({ message: 'Post deleted' })
+    } catch (err) {
+        if (!err.statusCode) err.statusCode = 500;
+        next(err);
+    }
+}
+
+exports.getStatus = async (req, res, next) => {
+    const userId = req.userId;
+
+    try {
+        const user = await User.findById(userId).exec();
+
+        if (!user) throwError('Unauthorized', 403);
+
+        res.status(200).json({ status: user.status });
+    } catch (err) {
+        if (!err.statusCode) err.statusCode = 500;
+        next(err)
+    }
+}
+
+exports.postStatus = async (req, res, next) => {
+    const userId = req.userId;
+    try {
+        const user = await User.findById(userId).exec();
+
+        if (!user) throwError('Unauthorized', 403);
+
+        user.status = req.body.status;
+        await user.save();
+
+        res.status(200).json({ message: 'Ok' });
     } catch (err) {
         if (!err.statusCode) err.statusCode = 500;
         next(err);

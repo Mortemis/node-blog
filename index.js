@@ -4,9 +4,11 @@ const express = require('express');
 const parser = require('body-parser');
 const mongoose = require('mongoose');
 const multer = require('multer');
+
 const feed = require('./routes/feed');
 const auth = require('./routes/auth');
 const errorHandler = require('./middlewares/error');
+const ws = require('./utils/ws');
 /**
  * config.json example:
  * { "MONGO_URI": "<mongo uri string>" } 
@@ -60,7 +62,13 @@ mongoose.set("useNewUrlParser", true);
 mongoose.set("useUnifiedTopology", true);
 mongoose.set("useFindAndModify", false);
 mongoose.connect(config.MONGO_URI)
-    .then(res =>
-        app.listen('8080', () => console.log('[INFO] DB connected & app started'))
-    )
+    .then(res => {
+        const server = app.listen('8080', () => console.log('[INFO] DB connected & app started'));
+        
+        
+        const io = ws.init(server);
+        io.on('connection', socket => {
+            console.log('Client connected');
+        });
+    })
     .catch(err => console.log(err));
