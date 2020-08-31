@@ -12,6 +12,12 @@ router.post('/post', [
     body('content').trim().isLength({ min: 5 })
 ], feedCtr.postPost);
 
-router.get('/post/:postId', feedCtr.getPost);
+router.route('/post/:postId')
+    .get(feedCtr.getPost)
+    .put(
+        body('title').trim().isLength({ min: 5 }),
+        body('content').trim().isLength({ min: 5 }),
+        feedCtr.updatePost)
+    .delete(feedCtr.deletePost);
 
 module.exports = router;
