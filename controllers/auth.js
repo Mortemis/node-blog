@@ -1,7 +1,10 @@
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
 
 const User = require('../models/user');
+
+const cfg = require('../config.json');
 
 exports.signup = async (req, res, next) => {
     const errors = validationResult(req);
@@ -27,6 +30,31 @@ exports.signup = async (req, res, next) => {
         if (!err.statusCode) err.statusCode = 500;
         next(err);
     }
+}
+
+exports.login = async (req, res, next) => {
+    const email = req.body.email;
+    const password = req.body.password;
+    try {
+        const user = await User.findOne({ email: email }).exec();
+
+        if (!user) throwError('User not found', 401);
+
+        const isRightPwd = await bcrypt.compare(password, user.password);
+
+        if (!isRightPwd) throwError('Password mismatch', 401);
+
+        const token = jwt.sign({
+            email: user.email,
+            userId: user._id.toString()
+        }, cfg.JWT_SECRET, { expiresIn: '1h' });
+
+        res.status(200).json({ token: token, userId: user._id.toString() });
+    } catch (err) {
+        if (!err.statusCode) err.statusCode = 500;
+        next(err);
+    }
+
 
 }
 
