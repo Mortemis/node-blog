@@ -59,5 +59,7 @@ exports.login = async (req, res, next) => {
 }
 
 function throwError(msg, code) {
-    throw new Error(msg).statusCode = code;
+    const err = new Error(msg);
+    err.statusCode = code;
+    throw err;
 }

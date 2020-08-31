@@ -1,6 +1,7 @@
 const { validationResult } = require('express-validator');
 
 const Post = require('../models/post');
+const User = require('../models/user');
 const fileUtil = require('../utils/file');
 
 exports.getPosts = async (req, res) => {
@@ -48,28 +49,27 @@ exports.postPost = async (req, res, next) => {
     const content = req.body.content;
     const imageUrl = req.file.path.replace('\\', '/');
 
-    console.log(imageUrl);
+    console.log(req.userId);
 
     const post = new Post({
         title: title,
         content: content,
         imageUrl: imageUrl,
-        creator: { name: 'Admin' },
+        creator: req.userId
     });
 
     try {
         await post.save();
 
+        const user = await User.findById(req.userId).exec();
+        user.posts.push(post);
+        await user.save();
+
         // Create post in a db
         res.status(201).json({
             msg: 'Post created successfully',
-            post: {
-                _id: Date.now(),
-                title: title,
-                content: content,
-                creator: { name: 'Admin' },
-                createdAt: new Date()
-            }
+            post: post,
+            creator: { _id: user._id, name: user.name }
         });
     } catch (err) {
         if (!err.statusCode) err.statusCode = 500;
@@ -98,6 +98,7 @@ exports.updatePost = async (req, res, next) => {
         // Get single post from db
         const post = await Post.findById(postId).exec();
         if (!post) throwError('No post found!', 404);
+        if (post.creator.toString() !== req.userId) throwError('Unauthorized edit.', 403);
 
         // Delete old image
         if (imageUrl !== post.imageUrl) fileUtil.clearOldImg(post.imageUrl);
@@ -121,20 +122,26 @@ exports.deletePost = async (req, res, next) => {
     const postId = req.params.postId;
     try {
         const post = await Post.findById(postId).exec();
-
+        if (post.creator.toString() !== req.userId) throwError('Unauthorized edit.', 403);
+        
         fileUtil.clearOldImg(post.imageUrl);
 
         await Post.findByIdAndRemove(postId).exec();
         console.log('[INFO] Post deleted: ' + postId);
+        
+        const user = await User.findById(req.userId).exec();
+        user.posts.pull(postId);
+        await user.save();
+
         res.status(200).json({ message: 'Post deleted' })
     } catch (err) {
         if (!err.statusCode) err.statusCode = 500;
         next(err);
     }
-
-
 }
 
 function throwError(msg, code) {
-    throw new Error(msg).statusCode = code;
+    const err = new Error(msg);
+    err.statusCode = code;
+    throw err;
 }
