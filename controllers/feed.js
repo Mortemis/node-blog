@@ -14,6 +14,7 @@ exports.getPosts = async (req, res) => {
 
         const posts = await Post.find()
             .populate('creator')
+            .sort({createdAt: -1})
             .skip((currentPage - 1) * perPage)
             .limit(perPage)
             .exec();
@@ -67,7 +68,7 @@ exports.postPost = async (req, res, next) => {
         user.posts.push(post);
         await user.save();
 
-        ws.getIO().emit('posts', { action: 'create', post: post });
+        ws.getIO().emit('posts', { action: 'create', post: { ...post._doc }, creator: { _id: req.userId, name: user.name } });
         // Create post in a db
         res.status(201).json({
             msg: 'Post created successfully',
@@ -99,9 +100,11 @@ exports.updatePost = async (req, res, next) => {
 
     try {
         // Get single post from db
-        const post = await Post.findById(postId).exec();
+        const post = await Post.findById(postId)
+            .populate('creator')
+            .exec();
         if (!post) throwError('No post found!', 404);
-        if (post.creator.toString() !== req.userId) throwError('Unauthorized edit.', 403);
+        if (post.creator._id.toString() !== req.userId) throwError('Unauthorized edit.', 403);
 
         // Delete old image
         if (imageUrl !== post.imageUrl) fileUtil.clearOldImg(post.imageUrl);
@@ -111,8 +114,8 @@ exports.updatePost = async (req, res, next) => {
         post.content = content;
         post.imageUrl = imageUrl.replace('\\', '/');
 
-        await post.save();
-
+        const result = await post.save();
+        ws.getIO().emit('posts', { action: 'update', post: result });
         res.status(200).json({ message: 'Post updated', post: post })
     } catch (err) {
         if (!err.statusCode) err.statusCode = 500;
@@ -135,7 +138,7 @@ exports.deletePost = async (req, res, next) => {
         const user = await User.findById(req.userId).exec();
         user.posts.pull(postId);
         await user.save();
-
+        ws.getIO().emit('posts', { action: 'delete', post: postId });
         res.status(200).json({ message: 'Post deleted' })
     } catch (err) {
         if (!err.statusCode) err.statusCode = 500;
