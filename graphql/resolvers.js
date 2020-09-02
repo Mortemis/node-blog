@@ -3,7 +3,9 @@ const jwt = require('jsonwebtoken');
 const validator = require('validator');
 
 const User = require('../models/user');
+const Post = require('../models/post');
 const cfg = require('../config.json');
+const { postStatus } = require('../controllers/feed');
 
 module.exports = {
     async createUser({ userInput }) {
@@ -59,5 +61,78 @@ module.exports = {
             email: user.email
         }, cfg.JWT_SECRET, { expiresIn: '1h' });
         return { token: token, userId: user._id.toString() }
+    },
+
+    async createPost({ postInput }, req) {
+        if (!req.isAuth) {
+            const err = new Error('Not authenticated');
+            err.code = 401;
+            throw err;
+        }
+
+        const errors = [];
+
+        if (validator.isEmpty(postInput.title) || !validator.isLength(postInput.title, { min: 5 })) {
+            errors.push({ message: 'Invalid title: too short' })
+        }
+
+        if (validator.isEmpty(postInput.content) || !validator.isLength(postInput.content, { min: 5 })) {
+            errors.push({ message: 'Invalid content' })
+        }
+
+        if (errors.length > 0) {
+            const err = new Error('Invalid input');
+            err.data = errors;
+            err.code = 422;
+            throw err;
+        }
+        const user = await User.findById(req.userId);
+
+        if (!user) {
+            const err = new Error('User not found');
+            err.code = 401;
+            throw err;
+        }
+
+        const post = new Post({
+            title: postInput.title,
+            content: postInput.content,
+            imageUrl: postInput.imageUrl,
+            creator: user
+        });
+        const createdPost = await post.save();
+        user.posts.push(createdPost);
+        user.save();
+        return {
+            ...createdPost._doc,
+            _id: createdPost._id.toString(),
+            createdAt: createdPost.createdAt.toISOString(),
+            updatedAt: createdPost.updatedAt.toISOString()
+        }
+    },
+
+    async posts(args, req) {
+        if (!req.isAuth) {
+            const err = new Error('Not authenticated');
+            err.code = 401;
+            throw err;
+        }
+
+        const totalPosts = await Post.find().countDocuments();
+        const posts = await Post.find()
+            .sort({ createdAt: -1 })
+            .populate('creator');
+        console.log(posts);
+        return {
+            posts: posts.map(p => {
+                return {
+                    ...p._doc,
+                    _id: p._id.toString(),
+                    createdAt: p.createdAt.toISOString(),
+                    updatedAt: p.updatedAt.toISOString()
+                };
+            }), totalPosts: totalPosts
+        }
     }
+
 }

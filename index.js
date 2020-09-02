@@ -12,6 +12,8 @@ const errorHandler = require('./middlewares/error');
 const ws = require('./utils/ws');
 const gqlSchema = require('./graphql/schema');
 const gqlResolver = require('./graphql/resolvers');
+const isAuth = require('./middlewares/is-auth');
+
 /**
  * config.json example:
  * { "MONGO_URI": "<mongo uri string>" } 
@@ -53,6 +55,7 @@ app.use((req, res, next) => {
     next();
 });
 
+app.use(isAuth);
 // Routing
 app.use('/feed', feed);
 
