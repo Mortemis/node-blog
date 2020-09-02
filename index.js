@@ -13,7 +13,7 @@ const ws = require('./utils/ws');
 const gqlSchema = require('./graphql/schema');
 const gqlResolver = require('./graphql/resolvers');
 const isAuth = require('./middlewares/is-auth');
-
+const fileHelper = require('./utils/file');
 /**
  * config.json example:
  * { "MONGO_URI": "<mongo uri string>" } 
@@ -60,6 +60,19 @@ app.use(isAuth);
 app.use('/feed', feed);
 
 app.use('/auth', auth);
+
+app.put('/post-image', (req, res, next) => {
+    if (!req.isAuth) throw new Error('Not authenticated!');
+    
+    if (!req.file) {
+        return res.status(200).json({ message: 'No file provided.' });
+    }
+    if (req.body.oldPath) fileHelper.clearOldImg(req.body.oldPath);
+    console.log('[INFO] > Image created: ' + req.file.path);
+    
+    return res.status(201)
+        .json({ message: 'File stored.', filePath: req.file.path });
+});
 
 app.use('/images', express.static(path.join(__dirname, 'images')));
 
