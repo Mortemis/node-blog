@@ -171,8 +171,10 @@ module.exports = {
     },
 
     async deletePost({ id }, req) {
+        if (!req.isAuth) throwAuthError();
+
         const post = await Post.findById(id);
-        
+
         if (!post) throwNoPostError();
 
         if (post.creator._id.toString() !== req.userId.toString()) throwAuthError();
@@ -188,6 +190,29 @@ module.exports = {
         await user.save();
 
         return true;
+    },
+
+    async user(args, req) {
+        if (!req.isAuth) throwAuthError();
+
+        const user = await User.findById(req.userId);
+        if (!user) throwAuthError();
+
+        return { ...user._doc, _id: user._id.toString() };
+    },
+
+    async updateStatus({ status }, req) {
+        if (!req.isAuth) throwAuthError();
+
+        const user = await User.findById(req.userId);
+        if (!user) throwAuthError();
+
+        user.status = status;
+        await user.save();
+        return {
+            ...user._doc,
+            _id: user._id.toString()
+        }
     }
 
 }
@@ -203,3 +228,4 @@ function throwNoPostError() {
     err.code = 404;
     throw err;
 }
+
