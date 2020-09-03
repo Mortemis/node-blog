@@ -4,8 +4,8 @@ const validator = require('validator');
 
 const User = require('../models/user');
 const Post = require('../models/post');
+const fileHelper = require('../utils/file');
 const cfg = require('../config.json');
-const { postStatus } = require('../controllers/feed');
 
 module.exports = {
     async createUser({ userInput }) {
@@ -45,17 +45,11 @@ module.exports = {
 
     async login({ email, password }) {
         const user = await User.findOne({ email: email });
-        if (!user) {
-            const err = new Error('User not found');
-            err.code = 401;
-            throw err;
-        }
+        if (!user) throwAuthError();
+
         const isEqual = await bcrypt.compare(password, user.password);
-        if (!isEqual) {
-            const err = new Error('Incorrect pwd');
-            err.code = 401;
-            throw err;
-        }
+        if (!isEqual) throwAuthError();
+
         const token = jwt.sign({
             userId: user._id.toString(),
             email: user.email
@@ -64,11 +58,7 @@ module.exports = {
     },
 
     async createPost({ postInput }, req) {
-        if (!req.isAuth) {
-            const err = new Error('Not authenticated');
-            err.code = 401;
-            throw err;
-        }
+        if (!req.isAuth) throwAuthError();
 
         const errors = [];
 
@@ -88,11 +78,7 @@ module.exports = {
         }
         const user = await User.findById(req.userId);
 
-        if (!user) {
-            const err = new Error('User not found');
-            err.code = 401;
-            throw err;
-        }
+        if (!user) throwAuthError();
 
         const post = new Post({
             title: postInput.title,
@@ -112,11 +98,7 @@ module.exports = {
     },
 
     async posts({ page }, req) {
-        if (!req.isAuth) {
-            const err = new Error('Not authenticated');
-            err.code = 401;
-            throw err;
-        }
+        if (!req.isAuth) throwAuthError();
         if (!page) page = 1;
         const perPage = 2;
 
@@ -137,6 +119,87 @@ module.exports = {
                 };
             }), totalPosts: totalPosts
         }
+    },
+
+    async post({ id }, req) {
+        if (!req.isAuth) throwAuthError();
+        const post = await Post.findById(id).populate('creator');
+        if (!post) throwNoPostError();
+        return {
+            ...post._doc,
+            _id: post._id.toString(),
+            createdAt: post.createdAt.toString(),
+            updatedAt: post.updatedAt.toString()
+        }
+    },
+
+    async updatePost({ id, postInput }, req) {
+        if (!req.isAuth) throwAuthError();
+
+        const post = await Post.findById(id).populate('creator');
+        if (!post) throwNoPostError();
+
+        if (post.creator._id.toString() !== req.userId.toString()) throwAuthError();
+
+        const errors = [];
+
+        if (validator.isEmpty(postInput.title) || !validator.isLength(postInput.title, { min: 5 })) {
+            errors.push({ message: 'Invalid title: too short' })
+        }
+
+        if (validator.isEmpty(postInput.content) || !validator.isLength(postInput.content, { min: 5 })) {
+            errors.push({ message: 'Invalid content' })
+        }
+
+        if (errors.length > 0) {
+            const err = new Error('Invalid input');
+            err.data = errors;
+            err.code = 422;
+            throw err;
+        }
+        post.title = postInput.title;
+        post.content = postInput.content;
+        if (postInput.imageUrl !== 'undefined') post.imageUrl = postInput.imageUrl;
+
+        const createdPost = await post.save();
+        return {
+            ...createdPost._doc,
+            _id: createdPost._id.toString(),
+            createdAt: createdPost.createdAt.toISOString(),
+            updatedAt: createdPost.updatedAt.toISOString()
+        }
+    },
+
+    async deletePost({ id }, req) {
+        const post = await Post.findById(id);
+        
+        if (!post) throwNoPostError();
+
+        if (post.creator._id.toString() !== req.userId.toString()) throwAuthError();
+
+        fileHelper.clearOldImg(post.imageUrl);
+
+        await Post.findByIdAndRemove(id);
+
+        const user = await User.findById(req.userUd);
+
+        user.posts.pull(id);
+
+        await user.save();
+
+        return true;
     }
 
+}
+
+function throwAuthError() {
+    const err = new Error('Not authenticated');
+    err.code = 401;
+    throw err;
+}
+
+function throwNoPostError() {
+    const err = new Error('No post found.');
+    err.code = 404;
+    throw err;
 }
